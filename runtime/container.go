@@ -17,6 +17,8 @@ import (
 	ocs "github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/net/context"
 	"golang.org/x/sys/unix"
+	"github.com/docker/containerd/api/grpc/types"
+	"github.com/golang/protobuf/proto"
 )
 
 // Container defines the operations allowed on a container
@@ -44,7 +46,7 @@ type Container interface {
 	// Checkpoints returns all the checkpoints for a container
 	Checkpoints(checkpointDir string) ([]Checkpoint, error)
 	// Checkpoint creates a new checkpoint
-	Checkpoint(checkpoint Checkpoint, checkpointDir string) error
+	Checkpoint(checkpoint *Checkpoint, checkpointDir string) error
 	// DeleteCheckpoint deletes the checkpoint for the provided name
 	DeleteCheckpoint(name string, checkpointDir string) error
 	// Labels are user provided labels for the container
@@ -338,7 +340,9 @@ func (c *container) Checkpoints(checkpointDir string) ([]Checkpoint, error) {
 	return out, nil
 }
 
-func (c *container) Checkpoint(cpt Checkpoint, checkpointDir string) error {
+func (c *container) Checkpoint(cpt *Checkpoint, checkpointDir string) error {
+	cpt.CreateResponse = &types.CreateCheckpointResponse{}
+
 	if checkpointDir == "" {
 		checkpointDir = filepath.Join(c.bundle, "checkpoints")
 	}
@@ -370,6 +374,15 @@ func (c *container) Checkpoint(cpt Checkpoint, checkpointDir string) error {
 		args = append(args, flags...)
 	}
 	add(c.runtimeArgs...)
+	if len(cpt.ParentPath) > 0 {
+		add("--parent-path", cpt.ParentPath)
+	}
+	if len(cpt.PageServer) > 0 {
+		add("--page-server", cpt.PageServer)
+	}
+	if cpt.PreDump {
+		add("--pre-dump")
+	}
 	if !cpt.Exit {
 		add("--leave-running")
 	}
@@ -390,6 +403,33 @@ func (c *container) Checkpoint(cpt Checkpoint, checkpointDir string) error {
 	if err != nil {
 		return fmt.Errorf("%s: %q", err.Error(), string(out))
 	}
+
+	cpt.CreateResponse.PreDump = cpt.PreDump
+	cpt.CreateResponse.Stats = new(types.DumpStatsEntry)
+
+	cpt.CreateResponse.Stats.FreezingTime = new(uint32)
+	cpt.CreateResponse.Stats.FrozenTime = new(uint32)
+	cpt.CreateResponse.Stats.IrmapResolve = new(uint32)
+	cpt.CreateResponse.Stats.MemdumpTime = new(uint32)
+	cpt.CreateResponse.Stats.MemwriteTime = new(uint32)
+	cpt.CreateResponse.Stats.PagesScanned = new(uint64)
+	cpt.CreateResponse.Stats.PagesSkippedParent = new(uint64)
+	cpt.CreateResponse.Stats.PagesWritten = new(uint64)
+
+	if b, err := ioutil.ReadFile(filepath.Join(path, "criu.work", "stats-dump")); err == nil {
+		var entry types.StatsEntry
+		// SKIP 12 BYTES, MAGIC NUMBER FROM
+		// https://lists.openvz.org/pipermail/criu/2017-February/035718.html LINE 529
+		err := proto.Unmarshal(b[12:], &entry)
+		if err != nil {
+			logrus.Infof("containerd: %s checkpoint: %s cannot unmarshal stats-dump: %v", c.id, cpt.Name, err)
+		} else {
+			cpt.CreateResponse.Stats = entry.Dump
+		}
+	} else {
+		logrus.Infof("containerd: %s checkpoint: %s cannot read stats-dump: %v", c.id, cpt.Name, err)
+	}
+
 	return err
 }
 

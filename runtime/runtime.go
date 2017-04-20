@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/docker/containerd/specs"
+	"github.com/docker/containerd/api/grpc/types"
 )
 
 var (
@@ -70,6 +71,16 @@ type Checkpoint struct {
 	Exit bool `json:"exit"`
 	// EmptyNS tells CRIU to omit a specified namespace
 	EmptyNS []string `json:"emptyNS,omitempty"`
+
+	// ParentPath
+	ParentPath string `json:"parentPath"`
+	// PreDump
+	PreDump bool `json:"preDump"`
+	// PageServer
+	PageServer string `json:"pageServer"`
+
+	// CreateResult (do not export)
+	CreateResponse *types.CreateCheckpointResponse `json:"-"`
 }
 
 // PlatformProcessState container platform-specific fields in the ProcessState structure

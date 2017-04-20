@@ -17,7 +17,7 @@ func (s *Supervisor) createCheckpoint(t *CreateCheckpointTask) error {
 	if !ok {
 		return ErrContainerNotFound
 	}
-	return i.container.Checkpoint(*t.Checkpoint, t.CheckpointDir)
+	return i.container.Checkpoint(t.Checkpoint, t.CheckpointDir)
 }
 
 // DeleteCheckpointTask holds needed parameters to delete a checkpoint

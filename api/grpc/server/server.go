@@ -88,13 +88,16 @@ func (s *apiServer) CreateCheckpoint(ctx context.Context, r *types.CreateCheckpo
 		UnixSockets: r.Checkpoint.UnixSockets,
 		Shell:       r.Checkpoint.Shell,
 		EmptyNS:     r.Checkpoint.EmptyNS,
+		ParentPath:  r.ParentPath,
+		PreDump:     r.PreDump,
+		PageServer:  r.PageServer,
 	}
 
 	s.sv.SendTask(e)
 	if err := <-e.ErrorCh(); err != nil {
 		return nil, err
 	}
-	return &types.CreateCheckpointResponse{}, nil
+	return e.Checkpoint.CreateResponse, nil
 }
 
 func (s *apiServer) DeleteCheckpoint(ctx context.Context, r *types.DeleteCheckpointRequest) (*types.DeleteCheckpointResponse, error) {
